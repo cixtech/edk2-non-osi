@@ -333,6 +333,26 @@ static void dump_spt_config(pm_config_spt_t * spt_config)
     printf("\t    coeff-alpha: "); dump_valid_flag(spt_config->spt_skin_coeff_alpha);
 }
 
+static void dump_gpio_config(pm_config_gpio_t* config)
+{
+    for (uint32_t i = 0; i < 3; i++) {
+        printf("  gpio[%d]:", i);
+        if (config->gpio[i].fields.valid == PM_CONFIG_INVALID) {
+            printf("NULL\n");
+        } else {
+           if (config->gpio[i].fields.raw_data == PM_GPIO_FUNC_NULL) {
+               printf("FUNCTION NULL\n");
+           } else if (config->gpio[i].fields.raw_data == PM_GPIO_FUNC_EC) {
+               printf("FUNCTION EC\n");
+           } else  if (config->gpio[i].fields.raw_data == PM_GPIO_FUNC_HEARTBEAT) {
+               printf("FUNCTION HEARTBEAT\n");
+           }  else  if (config->gpio[i].fields.raw_data == PM_GPIO_FUNC_INPUT) {
+               printf("FUNCTION INPUT\n");
+           }
+        }
+    }
+}
+
 static void dump_config()
 {
     pm_export_config_t *config = &g_config.config;
@@ -367,6 +387,11 @@ static void dump_config()
     dump_spt_config(&config->spt_config);
 
     printf("WDT timeout: "); dump_valid_flag(config->wdt_timeout);
+
+    printf("Core 100M opp: "); dump_valid_flag(config->opp_100M_enable);
+
+    printf("GPIO config:\n");
+    dump_gpio_config(&config->gpio_config);
 
     printf("\ncrc check: cka:0x%08x, ckb:0x%08x\n", g_config.crc1, g_config.crc2);
 }
@@ -466,6 +491,26 @@ static int32_t check_pvt_config(pm_config_pvt_t* config)
 }
 #endif
 
+#if PM_GPIO_CONFIG
+static int32_t check_gpio_config(pm_config_gpio_t* config)
+{
+    config_data_t *gpio = &config->gpio[0];
+    uint32_t gpio_num = 3;
+    do {
+        if (gpio->fields.valid == PM_CONFIG_VALID) {
+            if (gpio->fields.raw_data >= PM_GPIO_FUNC_MAX || gpio->fields.raw_data == PM_GPIO_FUNC_NULL) {
+                printf("gpio function invalid\n");
+                return -1;
+            }
+        }
+        gpio++;
+        gpio_num--;
+    } while (gpio_num);
+
+    return 0;
+}
+#endif
+
 int main(int argc, char **argv)
 {
     uint64_t ck = 0ULL;
@@ -519,6 +564,15 @@ int main(int argc, char **argv)
         return -1;
     }
     memcpy(config->fan_config,   fan_config,   FAN_CONFIG_SIZE);
+#endif
+
+#if PM_GPIO_CONFIG
+    if (check_gpio_config(&gpio_config)) {
+        printf("Bad GPIO settings\n");
+        return -1;
+    }
+    memcpy(&config->gpio_config, &gpio_config, sizeof(config->gpio_config));
+
 #endif
 
 #if PM_OPP_TABLE_CONFIG
